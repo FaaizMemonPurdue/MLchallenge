@@ -98,3 +98,5 @@ names=["Art Carney",
 "Ava Gardner",
 "Adele",
 "Bette Midler",]
+
+name_map = {name: index for index, name in enumerate(names)}
