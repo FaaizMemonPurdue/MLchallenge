@@ -12,7 +12,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 mtcnn = MTCNN(margin=20, select_largest=True, post_process=False, device=device)
 
 # Load a single image and display
-frame = cv2.imread("/home/ubuntu/fs6/data/train_small/train_small/11.jpg")
+frame = cv2.imread("/home/ubuntu/fs6/data/train_small/45.jpg")
 
 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 frame = Image.fromarray(frame)
@@ -47,4 +47,4 @@ def showBoxes(frame, output_jpg="boxes.jpg"):
     fig.savefig("output_images/" + output_jpg)
 
 # showFace(frame, "m20_11_show_face_no_post.jpg")
-showBoxes(frame, "x95_m20_11_box_face_no_post.jpg")
+showBoxes(frame, "x95_m20_45_box_face_no_post.jpg")
