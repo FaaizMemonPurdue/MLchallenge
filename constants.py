@@ -99,4 +99,5 @@ names=["Art Carney",
 "Adele",
 "Bette Midler",]
 
-name_map = {name: index for index, name in enumerate(names)}
+name_ind = {name: index for index, name in enumerate(names)}
+name_strind = {name: str(index) for index, name in enumerate(names)}
