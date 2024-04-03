@@ -101,3 +101,9 @@ names=["Art Carney",
 
 name_ind = {name: index for index, name in enumerate(names)}
 name_strind = {name: str(index) for index, name in enumerate(names)}
+
+bads = {"95",
+"106",
+"1495",
+"1210",
+"1055",}

@@ -28,23 +28,8 @@ def separate(src_folder, label_path):
         if not os.path.exists(dest_path):
             # print(f"placing {dest_path}")
             shutil.copy(src_path, dest_path)
-        # if index > 10:
-        #     break
 
-        
-    # files = os.listdir(img_folder)
-    # i = 0
-    # for file in files:
-    #     num_label = 
-    #     if i > 15:
-    #         break
-    
-
-
-#     # o_name = os.path.basename(train_folder)
-#     # s_name = "bar_" + folder_name
 if __name__ == '__main__':
-    # separate("/home/ubuntu/fs6/data/train_small", "purdue-face-recognition-challenge-2024/train_small.csv")
     separate(str(sys.argv[1]), str(sys.argv[2]))
 
 # print()

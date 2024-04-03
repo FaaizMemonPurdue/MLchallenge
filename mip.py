@@ -119,23 +119,18 @@ def retrieve_data(sec, pkl_path="data.pkl"):
 
 
 
-def train(src_folder:str, label_path, hard:bool = False):
-    if src_folder.endswith("/"):
-        src_folder = src_folder[:-1]
-
+def train(pkl_in, h5_out, hard:bool = False):
+    X_train, y_train = retrieve_data("train", pkl_in)
+    
     # Load VGGFace model with pre-trained weights
     tf_session = tf.compat.v1.Session()
     tf.compat.v1.keras.backend.set_session(tf_session)
-    trick = True
-    if trick:
-        vggface_model = VGGFace(model='vgg16', include_top=False, input_shape=(224, 224, 3), weights='vggface')
 
-        # Freeze the layers in the pre-trained model
-        for layer in vggface_model.layers:
-            layer.trainable = False
-        
-    else:
-        vggface_model = VGGFace(model='vgg16', include_top=True, input_shape=(224, 224, 3), classes=100, weights='vggface')
+    vggface_model = VGGFace(model='vgg16', include_top=False, input_shape=(224, 224, 3), weights='vggface')
+
+    # Freeze the layers in the pre-trained model
+    # for layer in vggface_model.layers:
+    #     layer.trainable = False
 
 
     # Flatten the output of the last convolutional layer
@@ -154,18 +149,9 @@ def train(src_folder:str, label_path, hard:bool = False):
     # Compile the model
     model.compile(optimizer=Adam(lr=0.001), loss='categorical_crossentropy', metrics=['accuracy'])
 
-    # Example data
-    # Replace this with your own data loading and preprocessing
-    # X_train = np.random.randn(100, 224, 224, 3)
-    # y_train = np.random.randint(0, num_classes, size=(100,))
-    pkl_path = f"{src_folder}.pkl"
-    if os.path.exists(pkl_path) and not hard:
-        X_train, y_train = retrieve_data("train", pkl_path)
-    else:
-        X_train, _, y_train, _ = extract_data(src_folder, label_path)
-
+    model.summary()
     # Checkpoint to save the model weights when validation accuracy improves
-    checkpoint = ModelCheckpoint('best_model.h5', monitor='val_accuracy', save_best_only=True, mode='max', verbose=1)
+    checkpoint = ModelCheckpoint(h5_out, monitor='val_accuracy', save_best_only=True, mode='max', verbose=1)
 
     # Train the model
     model.fit(X_train, tku.to_categorical(y_train, num_classes=num_classes), 
@@ -173,6 +159,50 @@ def train(src_folder:str, label_path, hard:bool = False):
 
     # After training, the best model (based on validation accuracy) will be saved to 'best_model.h5'
 
+def test(src_folder:str, label_path, pkl_path, h5_path):
+    X_test, y_test = retrieve_data("test", pkl_path)
+
+    vggface_model = VGGFace(model='vgg16', include_top=False, input_shape=(224, 224, 3), weights='vggface')
+    for layer in vggface_model.layers:
+        layer.trainable = False
+
+    # Load the weights into the base model
+    # vggface_model.load_weights('hss/small_1.h5')  # replace with the actual path
+
+    # Define the structure of your custom model (should be the same as the one you trained)
+    # Flatten the output of the last convolutional layer
+    num_classes = 100  # Example: if you have 100 classes
+    hidden_dim = 4096
+
+    last_layer = vggface_model.get_layer('pool5').output
+    x = Flatten(name='flatten')(last_layer)
+    x = Dense(hidden_dim, activation='relu', name='fc6')(x)
+    x = Dense(hidden_dim, activation='relu', name='fc7')(x)
+    predictions = Dense(num_classes, activation='softmax')(x)
+    # Create a new model
+    model = Model(inputs=vggface_model.input, outputs=predictions)
+
+    # Load the weights from the best model into your custom model
+    model.load_weights(h5_path)
+    
+    # Use the model to predict the outputs for the test data
+    predictions = model.predict(X_test)
+
+    # The predictions are usually in the form of probabilities, so you might want to convert them to class labels
+    predicted_labels = np.argmax(predictions, axis=1)
+
+    # Now you can compare the predicted labels to the actual labels to calculate the accuracy
+    accuracy = np.mean(predicted_labels == y_test)
+
+    print(f'Test accuracy: {accuracy * 100:.2f}%')
+
+
 if __name__ == '__main__':
-    extract_data("../data/train", "purdue-face-recognition-challenge-2024/train.csv")
-    train("../data/train", "purdue-face-recognition-challenge-2024/train.csv", hard=False)
+    # extract_data("../data/train_small", "purdue-face-recognition-challenge-2024/train_small.csv")
+    # train("../data/train_small", "purdue-face-recognition-challenge-2024/train_small.csv", hard=False)
+    # test("../data/train_small", "purdue-face-recognition-challenge-2024/train_small.csv",
+    #      "train_small.pkl", "h5s/small_1.h5")
+    train("train_small.pkl", "h5s/small_2.h5")
+    
+    # X_train, y_train = retrieve_data("test", "train_small.pkl")
+    # print(y_train.shape)
