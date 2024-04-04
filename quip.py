@@ -314,7 +314,7 @@ def uktest(fpkl, h5_path, m="resnet50"):
     predicted_labels = np.argmax(predictions, axis=1)
     print(predicted_labels.shape)
     # Now you can compare the predicted labels to the actual labels to calculate the accuracy
-    writeGuessCSV(predicted_labels, "guesses.csv")
+    writeGuessCSV(predicted_labels, "apr4.csv")
     
 
 
@@ -325,7 +325,8 @@ if __name__ == '__main__':
     # # fold = "../data/train_small_f"
     # # fpkl = "train_small_f_1"
     # extract_labels(csv, fpkl)    
-    tr_ts("train_small_f1", "tr_sm_labels", "tr_sm_f1.h5")
-    uktest("test_f1", "tr_sm_f1.h5")
+    extract_ffold("../data/train_f", "train_full_f1")
+    tr_ts("train_full_f1", "tr_labels", "tr_full_f1.h5")
+    uktest("test_f1", "tr_full_f1.h5")
 
     # uktest("train_small_f1", "small_froze_res.h5")
