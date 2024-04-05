@@ -25,14 +25,14 @@ def normalize(x, data_format): #once per img
     x_temp = np.copy(x)
     assert data_format in {'channels_last'}
 
-    # x_temp = x_temp[..., ::-1] #flip rgb -> bgr
+    x_temp = x_temp[..., ::-1] #flip rgb -> bgr
 
-    mean_values = np.mean(x_temp, axis=(0, 1, 2))
+    mean_values = np.mean(x_temp, axis=(0, 1))
 
     # Extract the mean value for each channel
-    mean_blue = mean_values
-    mean_green = mean_values
-    mean_red = mean_values
+    mean_blue = mean_values[0]
+    mean_green = mean_values[1]
+    mean_red = mean_values[2]
     x_temp[..., 0] -= mean_blue
     x_temp[..., 1] -= mean_green
     x_temp[..., 2] -= mean_red
@@ -53,18 +53,16 @@ def face_pickin(source_objs: List[Dict[str, Any]]):
                 mc = obj["confidence"]
         return maxObj
             
-def extract_ffold(src_folder:str, fpkl):    
+def extract_ffold(src_folder:str, lb, ub, fpkl):    
     if src_folder.endswith("/"):
         src_folder = src_folder[:-1]
     
-    max_faces = len(os.listdir(src_folder))
+    max_faces = 1000
     face_data = np.empty((max_faces, 224, 224, 3))
-
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    for imno in range(max_faces):
+    ind = 0
+    for imno in range(lb, ub):
         fname = f"{imno}.jpg"
-        if fname[:-4] in bads:
-            continue
 
         img_path = os.path.join(src_folder, fname)
         if not os.path.exists(img_path):
@@ -89,17 +87,30 @@ def extract_ffold(src_folder:str, fpkl):
         chosen_face = face_pickin(source_objs)["face"]
         # print(chosen_face.shape)
         # cv2.imwrite("com.jpg", chosen_face)
-        # norm = normalize(chosen_face, "channels_last")
-        norm = chosen_face
-        face_data[imno] = norm
-        # if used > 2:
-        #     break
+        norm = normalize(chosen_face, "channels_last")
+        # norm = chosen_face
+        face_data[ind] = norm
+        
+        if ind == 999:
+            pno = (imno + 1) / max_faces
+            with open(f"{fpkl}_{pno}.pkl", 'wb') as f:
+                pickle.dump((face_data), f)
+            print(f"wrote {fpkl}_{pno}.pkl")
+            print(face_data.shape)
+            del(face_data)
+            face_data = np.empty((max_faces, 224, 224, 3))
+            ind = 0      
+        else:
+            ind += 1 
 
-    # Pickle the data
-    with open(f"{fpkl}.pkl", 'wb') as f:
-        pickle.dump((face_data), f)
-    print(face_data.shape)
-    return face_data
+    
+def renorm(fpkl):
+    unorm = retrieve_ffold(fpkl)
+    for face in unorm:
+        face = normalize(face, 'channels_last')
+    with open(f"{fpkl}_norm.pkl", 'wb') as f:
+        pickle.dump((unorm), f)
+        
 
 def extract_labels(label_path, lpkl):
     labels = pd.read_csv(label_path)
@@ -158,8 +169,31 @@ def retrieve_labels(lpkl):
 
 #     # After training, the best model (based on validation accuracy) will be saved to 'best_model.h5'
 
+from keras.utils import Sequence
 
-def train(X_train, y_train, h5_out, m="resnet50"):
+class CustomDataGenerator(Sequence):
+    def __init__(self, data, labels, batch_size):
+        self.data = data
+        self.labels = labels
+        self.batch_size = batch_size
+        self.indices = np.arange(len(self.data))
+        
+    def __len__(self):
+        return int(np.ceil(len(self.data) / self.batch_size))
+    
+    def __getitem__(self, index):
+        start_index = index * self.batch_size
+        end_index = min((index + 1) * self.batch_size, len(self.data))
+        
+        batch_indices = self.indices[start_index:end_index]
+        batch_data = self.data[batch_indices]
+        batch_labels = self.labels[batch_indices]
+        
+        # You can perform any preprocessing here
+        
+        return batch_data, batch_labels
+    
+def train(X_train, y_train, X_test, y_test, h5_out, m="resnet50"):
     # X_train, y_train = retrieve_ffold(fpkl), retrieve_labels(lpkl)
     
     # Load VGGFace model with pre-trained weights
@@ -204,15 +238,18 @@ def train(X_train, y_train, h5_out, m="resnet50"):
     # Checkpoint to save the model weights when validation accuracy improves
     checkpoint = ModelCheckpoint(h5_out, monitor='val_accuracy', save_best_only=True, mode='max', verbose=1)
 
+    batch_size = 32
+    
+    train_generator = CustomDataGenerator(X_train, tku.to_categorical(y_train, num_classes=num_classes), batch_size)
+    val_generator = CustomDataGenerator(X_test, tku.to_categorical(y_test, num_classes=num_classes), batch_size)
     # Train the model
-    model.fit(X_train, tku.to_categorical(y_train, num_classes=num_classes), 
-            batch_size=128, epochs=100, validation_split=0.2, callbacks=[checkpoint])
+    model.fit(train_generator, validation_data=val_generator, epochs=100, callbacks=[checkpoint])
 
     # After training, the best model (based on validation accuracy) will be saved to 'best_model.h5'
     
 def tr_ts(fpkl, lpkl, h5_out, m="resnet50"):
     faces, labels = retrieve_ffold(fpkl), retrieve_labels(lpkl)
-    faces_train, faces_test, labels_train, labels_test = train_test_split(faces, labels, test_size=0.5, random_state=42)
+    faces_train, faces_test, labels_train, labels_test = train_test_split(faces, labels, test_size=0.1, random_state=42)
     train(faces_train, labels_train, h5_out, m)
     qtest(faces_test, labels_test, h5_out)
     # if not os.path.isdir("odir"):
@@ -317,16 +354,51 @@ def uktest(fpkl, h5_path, m="resnet50"):
     writeGuessCSV(predicted_labels, "apr4.csv")
     
 
+def har_tr_ts(fpklnos, lpkl, h5_out, m="resnet50"):
 
+    array_list = []
+    for no in fpklnos:
+        arr = retrieve_ffold("train_full_" + str(no) + '.0')  # Assuming retrieve() function takes filename without extension
+        # Append array to the list
+        array_list.append(arr)
+
+    # Concatenate arrays along the first axis
+
+    faces = np.concatenate(array_list, axis=0)
+    
+    print(faces.shape)
+    labels = []
+    all_labels = retrieve_labels(lpkl)
+    for no in fpklnos:
+        start = (no - 1) * 1000
+        end = start + 1000
+        labels.extend(all_labels[start:end])
+    labels = np.array(labels)
+    print(labels.shape)
+    faces_train, faces_test, labels_train, labels_test = train_test_split(faces, labels, test_size=0.2, random_state=42)
+    train(faces_train, labels_train, faces_test, labels_test, h5_out, m)
+    # qtest(faces_test, labels_test, h5_out)
 
 if __name__ == '__main__':
     # csv = str(sys.argv[1])
     # fpkl = str(sys.argv[2])
     # # fold = "../data/train_small_f"
     # # fpkl = "train_small_f_1"
-    # extract_labels(csv, fpkl)    
-    extract_ffold("../data/train_f", "train_full_f1")
-    tr_ts("train_full_f1", "tr_labels", "tr_full_f1.h5")
+    # # # extract_labels(csv, fpkl)    
+    # src_f = sys.argv[1] 
+    # lb = int(sys.argv[2])
+    # ub = int(sys.argv[3])
+    # fpkl = sys.argv[4]
+    # extract_ffold(sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4])
+
+    # extract_ffold("../data/train_f", 11000, 12000, "train_full")
+    fpkls = [i for i in range(1, 41)]
+    # har_tr_ts(fpkls, "tr_labels", "tr_full_f1.h5")
     uktest("test_f1", "tr_full_f1.h5")
 
     # uktest("train_small_f1", "small_froze_res.h5")
+    # renorm("train_small_f1")
+    # tr_ts("train_small_f1_norm", "tr_sm_labels", "tr_sm_normN.h5")
+    # uktest("test_f1", "tr_sm_hard.h5")
+    # moh = retrieve_ffold("train_full_13.0")
+    # cv2.imwrite("john.jpg", moh[31])
