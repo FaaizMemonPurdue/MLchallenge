@@ -395,7 +395,7 @@ if __name__ == '__main__':
     fpkls = [i for i in range(1, 41)]
     # har_tr_ts(fpkls, "tr_labels", "tr_full_f1.h5")
     uktest("test_f1", "tr_full_f1.h5")
-
+    print("ack")
     # uktest("train_small_f1", "small_froze_res.h5")
     # renorm("train_small_f1")
     # tr_ts("train_small_f1_norm", "tr_sm_labels", "tr_sm_normN.h5")
